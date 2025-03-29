@@ -1,6 +1,7 @@
 def testfunc(param):
     # Function implementation here
+
     pass
 
-
-testfunc(1)
+if __name__ == "__main__":
+    testfunc(1)
