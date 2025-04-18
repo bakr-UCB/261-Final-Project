@@ -50,6 +50,7 @@ def compute_and_join_pagerank_metrics(
     df: DataFrame,
     base_path: str,
     year_col: str = "YEAR",
+    quarter_col: str = "QUARTER",
     test_mode: bool = False
 ) -> DataFrame:
     """
@@ -66,21 +67,46 @@ def compute_and_join_pagerank_metrics(
     """
     print("🔁 compute_and_join_pagerank_metrics...")
 
-    years = [2016] if test_mode else [r[0] for r in df.select(year_col).distinct().collect()]
+    def prev_period(year: int, quarter: int) -> (int, int):
+        if quarter == 1:
+            return (year - 1, 4)
+        else:
+            return (year, quarter - 1)
+
+    if test_mode:
+        pairs = [(2016, 1)]
+    else:
+        pairs = df.select(year_col, quarter_col).distinct().orderBy(year_col, quarter_col).rdd.map(lambda r: (r[0], r[1])).collect()
+
+    # years = [2016] if test_mode else [r[0] for r in df.select(year_col).distinct().collect()]
     output_dfs = []
 
-    for year in years:
-        print(f"📆 Processing year {year}...")
+    # # for year in years:
+    #     print(f"📆 Processing year {year}...")
 
-        this_year_df = df.filter(col(year_col) == year)
-        last_year_df = df.filter(col(year_col) == year - 1)
+    #     this_year_df = df.filter(col(year_col) == year)
+    #     last_year_df = df.filter(col(year_col) == year - 1)
 
-        save_path = f"{base_path}/airport_pagerank/year={year - 1}/"
+    #     save_path = f"{base_path}/airport_pagerank/year={year - 1}/"
+    #     if Path(save_path).exists():
+    #         pr_df = spark.read.parquet(save_path)
+    #         print(f"✅ Loaded cached graph metrics for {year - 1}")
+
+    for year, quarter in pairs:
+        print(f"📆 Processing {year} Q{quarter}...")
+        prev_year, prev_quarter = prev_period(year, quarter)
+
+        this_period_df = df.filter((col(year_col) == year) & (col(quarter_col) == quarter))
+        last_period_df = df.filter((col(year_col) == prev_year) & (col(quarter_col) == prev_quarter))
+
+        save_path = f"{base_path}/airport_pagerank/year{prev_year}_q{prev_quarter}/"
+
         if Path(save_path).exists():
             pr_df = spark.read.parquet(save_path)
-            print(f"✅ Loaded cached graph metrics for {year - 1}")
+            print(f"✅ Loaded cached graph metrics for {prev_year} {prev_quarter}")
+
         else:
-            edges = last_year_df.groupBy("ORIGIN", "DEST").count().withColumnRenamed("count", "weight")
+            edges = last_period_df.groupBy("ORIGIN", "DEST").count().withColumnRenamed("count", "weight")
             vertices = edges.selectExpr("ORIGIN as id").union(edges.selectExpr("DEST as id")).distinct()
             g = GraphFrame(vertices, edges.withColumnRenamed("ORIGIN", "src").withColumnRenamed("DEST", "dst"))
 
@@ -90,9 +116,9 @@ def compute_and_join_pagerank_metrics(
             pr_df = pr_df.join(deg_df, "id", "left")
 
             pr_df.write.mode("overwrite").parquet(save_path)
-            print(f"💾 Saved PageRank for {year - 1}")
+            print(f"💾 Saved PageRank for {prev_year} {prev_quarter}")
 
-        joined = this_year_df.join(pr_df.withColumnRenamed("id", "ORIGIN"), on="ORIGIN", how="left")
+        joined = this_period_df.join(pr_df.withColumnRenamed("id", "ORIGIN"), on="ORIGIN", how="left")
         output_dfs.append(joined)
 
     return output_dfs[0] if test_mode else reduce(DataFrame.unionByName, output_dfs)
@@ -177,11 +203,13 @@ def add_prophet_features_per_airport(
                 print(f"⚠️ Not enough data for Prophet at {airport} — skipping.")
                 continue
             df_pd["ds"] = pd.to_datetime(df_pd["ds"])
-            print(holidays.US())
-            df_pd["holidays"] = df_pd["ds"].apply(lambda d: abs((d - pd.Timestamp(h)).days) for h in holidays.US())
-            df_pd["is_holiday_week"] = df_pd["ds"].apply(
-                lambda d: any(abs((d - pd.Timestamp(h)).days) <= 3 for h in holidays.US())
-            )/
+            us_holidays = holidays.US(years=range(2014, 2020))
+            holiday_dates = [pd.Timestamp(h) for h in list(us_holidays.keys())]
+
+
+
+            df_pd["holidays"] = df_pd["ds"].apply(lambda d: [__builtins__.abs((d - h).days) for h in us_holidays_ts])            
+            df_pd["is_holiday_week"] = df_pd["ds"].apply(lambda d: any(__builtins__.abs((d - pd.Timestamp(h)).days) <= 3 for h in us_holidays_ts))
 
             model = Prophet(
                 weekly_seasonality=True,
