@@ -181,7 +181,7 @@ def add_prophet_features_per_airport(
     Returns:
         DataFrame with trend, seasonal, and is_holiday_week features
     """
-    print("🔁 add_prophet_features_per_airport...")
+    print("🔁 Running: add_prophet_features_per_airport...")
 
     from pyspark.sql.functions import to_date
     airport_list = ["JFK", "ORD"] if test_mode else spark_df.select("ORIGIN").distinct().rdd.map(lambda r: r[0]).collect()
@@ -203,14 +203,13 @@ def add_prophet_features_per_airport(
                 print(f"⚠️ Not enough data for Prophet at {airport} — skipping.")
                 continue
             df_pd["ds"] = pd.to_datetime(df_pd["ds"])
-            us_holidays = holidays.US(years=range(2014, 2020))
+            us_holidays = holidays.US(years=range(df_pd["ds"].dt.year.min(), df_pd["ds"].dt.year.max() + 2))
             holiday_dates = [pd.Timestamp(h) for h in list(us_holidays.keys())]
-
-
 
             df_pd["holidays"] = df_pd["ds"].apply(lambda d: [__builtins__.abs((d - h).days) for h in us_holidays_ts])            
             df_pd["is_holiday_week"] = df_pd["ds"].apply(lambda d: any(__builtins__.abs((d - pd.Timestamp(h)).days) <= 3 for h in us_holidays_ts))
-
+            
+            # TODO: implement Daily rolling window instead of fitting all the data to avoid leakage
             model = Prophet(
                 weekly_seasonality=True,
                 yearly_seasonality=True,
