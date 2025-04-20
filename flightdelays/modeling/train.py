@@ -1,4 +1,4 @@
-from typing import List, Dict, Tuple, Any, Union,Callable
+from typing import List, Dict, Tuple, Any, Union, Callable, Optional
 import numpy as np
 import random
 from datetime import datetime, timedelta
@@ -63,21 +63,29 @@ def time_series_cv_folds(
     k: int=3,
     blocking: bool=False,
     overlap: float=0.0,
+    keep_cols: Optional[List[str]] = None,
+    sampling_fn: Optional[Callable[[DataFrame], DataFrame]] = None,
+    rename_seasonals: bool = False,
+    rename_map: Optional[Dict[str, str]] = None,
     verbose: bool=False
 ) -> list[Tuple[DataFrame, DataFrame]]:
     """
     Split a time-series PySpark DataFrame into k train/test folds with optional overlap and blocking.
-    
+
     Args:
         df (DataFrame): PySpark DataFrame with a timestamp column.
-        dep_utc_time_colvarname (str): Name of the timestamp column.
+        time_col (str): Name of the timestamp column.
         k (int): Number of folds.
-        blocking (bool): Whether to block the training set to avoid cumulative data.
-        overlap (float): Fraction of overlap between validation windows (e.g. 0.2 = 20% overlap).
-        verbose (bool): Whether to print the time splits.
-        
+        blocking (bool): If True, training windows don't accumulate.
+        overlap (float): Fraction of overlap between validation windows.
+        keep_cols (List[str], optional): Columns to keep in the output folds.
+        downsample_fn (Callable, optional): Function to downsample train data (e.g., handle imbalance).
+        rename_seasonals (bool): If True, renames fold-specific seasonal features like daily_i to daily.
+        rename_map (Dict[str, str], optional): Mapping of fold-specific seasonal columns to generic names.
+        verbose (bool): If True, print debug info.
+
     Returns:
-        List of (train_df, val_df) tuples.
+        List[Tuple[DataFrame, DataFrame]]: List of (train_df, val_df) fold tuples.
     """
     # Get time boundaries
     min_date = df.select(F.min(time_col)).first()[0]
@@ -89,16 +97,16 @@ def time_series_cv_folds(
     chunk_size = int(np.ceil(n_days / total_width))
 
     if verbose:
-        print(f"Splitting data into {k} folds with {overlap*100:.0f}% overlap")
-        print(f"Min date: {min_date}, Max date: {max_date}")
-        print(f"{chunk_size:,} days per fold")
+        print(f"🧠 Creating {k} folds with {overlap*100:.0f}% overlap")
+        print(f"🗓 Date range: {min_date.date()} to {max_date.date()} ({n_days:,} days)")
+        print(f"🧩 Each fold span ≈ {chunk_size:,} days")
         print("************************************************************")
 
     folds = []
     for i in range(k):
         # Offset calculation with overlap
         train_start_offset = 0 if not blocking else int(i * (1 - overlap) * chunk_size)
-        train_end_offset = int((i + 1) * chunk_size)
+        train_end_offset = int(i * (1 - overlap) * chunk_size + chunk_size)
         val_start_offset = train_end_offset
         val_end_offset = int(val_start_offset + chunk_size)
 
@@ -106,22 +114,43 @@ def time_series_cv_folds(
         train_start = min_date + timedelta(days=train_start_offset)
         train_end = min_date + timedelta(days=train_end_offset)
         val_start = min_date + timedelta(days=val_start_offset)
-        val_end = min_date + timedelta(days=val_end_offset)
+        val_end = min(min_date + timedelta(days=val_end_offset), max_date + timedelta(days=1))
 
         if val_start >= max_date:
             break
-        if val_end > max_date:
-            val_end = max_date + timedelta(days=1)
 
         # Apply filters
         train_df = df.filter((F.col(time_col) >= train_start) & (F.col(time_col) < train_end))
         val_df = df.filter((F.col(time_col) >= val_start) & (F.col(time_col) < val_end))
 
+        # Optional downsampling or upsampling for imbalance
+        if sampling_fn is not None:
+            train_df = sampling_fn(train_df)
+
+        # Optional renaming of fold-specific seasonal columns
+        if rename_seasonals:
+            for old_template, new_name in rename_map.items():
+                old_col = old_template.format(i=i)
+                if old_col in train_df.columns:
+                    train_df = train_df.withColumnRenamed(old_col, new_name)
+                if old_col in val_df.columns:
+                    val_df = val_df.withColumnRenamed(old_col, new_name)
+
+        # Optional fill for missing seasonal data
+        fill_cols = ["daily", "weekly", "yearly", "holidays", "mean_dep_delay", "prop_delayed"]
+        fill_defaults = {col: 0 for col in fill_cols}
+        train_df = train_df.fillna(fill_defaults)
+        val_df = val_df.fillna(fill_defaults)
+
+        if keep_cols:
+            train_df = train_df.select(*keep_cols)
+            val_df = val_df.select(*keep_cols)
+
         if verbose:
-            print(f"Fold {i + 1}:")
-            print(f"  TRAIN: {train_start.date()} → {train_end.date()} ({train_df.count():,} rows)")
-            print(f"  VAL:   {val_start.date()} → {val_end.date()} ({val_df.count():,} rows)")
-            print("------------------------------------------------------------")
+            print(f"\n📦 Fold {i + 1}")
+            print(f"  🛠  TRAIN: {train_start.date()} → {train_end.date()} ({train_df.count():,} rows)")
+            print(f"  🔍   VAL: {val_start.date()} → {val_end.date()} ({val_df.count():,} rows)")
+            print("------------------------------------------------------")
 
         folds.append((train_df, val_df))
 
@@ -162,7 +191,7 @@ def cv_eval(predictions: DataFrame, label_col="outcome", prediction_col="predict
     Output: desired score 
     """
     rdd_preds_m = predictions.select(['prediction', label_col]).rdd
-    rdd_preds_b = predictions.select('outcome','probability').rdd.map(lambda row: (float(row['probability'][1]), float(row['outcome'])))
+    rdd_preds_b = predictions.select(label_col,'probability').rdd.map(lambda row: (float(row['probability'][1]), float(row[label_col])))
     metrics_m = MulticlassMetrics(rdd_preds_m)
     metrics_b = BinaryClassificationMetrics(rdd_preds_b)
     if metric == "F2":
@@ -217,7 +246,7 @@ def model_tuner(
         **model_params
     )
 
-    pipeline = Pipeline(stages=[model] + stages) 
+    pipeline = Pipeline(stages= stages + [model]) 
 
     scores = []
 
@@ -241,11 +270,7 @@ def model_tuner(
         if verbose:
             print(f"✅ Average {metric} Score: {avg_score:.4f} | Model: {model_name}")
 
-    return {
-        "model": model_name,
-        "params": model_params,
-        "avg_f2_score": avg_score
-    }
+    return model_name, avg_score, model_params
 
 
 def make_hyperopt_objective(
