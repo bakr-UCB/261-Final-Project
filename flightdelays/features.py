@@ -15,6 +15,56 @@ from prophet import Prophet
 import pandas as pd
 import holidays
 
+def select_features(
+    df: DataFrame) -> tuple[list, list]:
+    """
+    Select features for model training.
+    Args:
+        df: Spark DataFrame with features for training
+    Returns:
+        DataFrame with selected features
+    """
+    # weather columns
+    weather_cols = [col for col in df.columns if "origin_Hourly" in col]
+    remove_me = ["origin_HourlyPresentWeatherType","origin_HourlySkyConditions","origin_HourlyWindDirection"]
+    num_weather_cols = [c for c in weather_cols if c not in remove_me]
+
+    # seasonality columns
+    seasonality_cols = ["daily","weekly","yearly","holidays"]
+
+    # time columns
+    time_cols = ["mean_dep_delay","prop_delayed"]
+
+    # date related columns
+    date_cols = ["YEAR","MONTH","DAY_OF_MONTH","DAY_OF_WEEK"]
+
+    # flight metadata
+    flight_metadata_cols = ["OP_UNIQUE_CARRIER","ORIGIN_ICAO","DEST_ICAO"]
+
+    # prior & current flight cols
+    num_flight_cols = ['turnaround_time_calc', 
+                    'priorflight_depdelay_calc',
+                    'DISTANCE',
+                    'CRS_ELAPSED_TIME',
+                    ]
+
+    bool_flight_cols = ['priorflight_isdeparted', 
+                        'priorflight_isarrived_calc',
+                        'priorflight_isdelayed_calc',
+                        'priorflight_cancelled_true']
+
+    # graph columns
+    graph_cols = ["pagerank"]
+
+    # fields that will not be features but need to be kept for processing
+    keep_me = ["outcome","sched_depart_utc"]
+
+    ########## Define columns to be used as numeric and categorical features in the pipeline ##########
+    numeric_cols = [*num_weather_cols, *seasonality_cols, *time_cols, *num_flight_cols, *graph_cols]
+    categorical_cols = [*date_cols, *flight_metadata_cols, *bool_flight_cols]
+
+    return numeric_cols, categorical_cols
+
 def add_local_time_features(
     df: DataFrame,
     time_col: str = "sched_depart_date_time",
