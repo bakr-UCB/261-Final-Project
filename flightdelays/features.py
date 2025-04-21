@@ -1,19 +1,26 @@
 # features.py
-from databricks.sdk.runtime import *
-from pyspark.sql import DataFrame
-from pyspark.sql.functions import *
-from pyspark.sql.window import Window
-from graphframes import GraphFrame
-from typing import Optional, List
-from pathlib import Path
-import math
 from functools import reduce
-import os
+import math
+from pathlib import Path
+from typing import Optional
+
+from databricks.sdk.runtime import *
+from graphframes import GraphFrame
+import holidays
+from loguru import logger
+import pandas as pd
 
 # Prophet and Pandas in driver mode
 from prophet import Prophet
-import pandas as pd
-import holidays
+from pyspark.sql import DataFrame
+from pyspark.sql.functions import *
+from pyspark.sql.window import Window
+from tqdm import tqdm
+import typer
+
+from flightdelays.config import PROCESSED_DATA_DIR
+
+app = typer.Typer()
 
 def select_features(
     df: DataFrame) -> tuple[list, list]:
@@ -301,3 +308,23 @@ def save_features(df: DataFrame, path: str) -> None:
 
 def load_features_if_exists(path: str) -> Optional[DataFrame]:
     return spark.read.parquet(path) if Path(path).exists() else None
+
+@app.command()
+def main(
+    # ---- REPLACE DEFAULT PATHS AS APPROPRIATE ----
+    input_path: Path = PROCESSED_DATA_DIR / "dataset.csv",
+    output_path: Path = PROCESSED_DATA_DIR / "features.csv",
+    # -----------------------------------------
+):
+    # ---- REPLACE THIS WITH YOUR OWN CODE ----
+    logger.info("Generating features from dataset...")
+    for i in tqdm(range(10), total=10):
+        if i == 5:
+            logger.info("Something happened for iteration 5.")
+    logger.success("Features generation complete.")
+    # -----------------------------------------
+
+
+if __name__ == "__main__":
+    app()
+    
