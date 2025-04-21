@@ -190,7 +190,7 @@ def cv_eval(predictions: DataFrame, label_col="outcome", prediction_col="predict
     Input: transformed df with prediction and label
     Output: desired score 
     """
-    rdd_preds_m = predictions.select(['prediction', label_col]).rdd
+    rdd_preds_m = predictions.select([prediction_col, label_col]).rdd
     rdd_preds_b = predictions.select(label_col,'probability').rdd.map(lambda row: (float(row['probability'][1]), float(row[label_col])))
     metrics_m = MulticlassMetrics(rdd_preds_m)
     metrics_b = BinaryClassificationMetrics(rdd_preds_b)
@@ -254,7 +254,7 @@ def model_tuner(
         for i, (train_df, val_df) in enumerate(folds):
             fitted_model = pipeline.fit(train_df)
             preds = fitted_model.transform(val_df)
-            score = cv_eval(preds, metric)
+            score = cv_eval(predictions=preds, label_col=label, prediction_col="prediction", metric=metric)
             scores.append(score)
 
             if verbose:
@@ -318,8 +318,7 @@ def make_hyperopt_objective(
         return {
             "loss": -result[1],  # Minimize negative F2
             "status": STATUS_OK,
-            "params": result[2
-                             ]
+            "params": result[2]
         }
 
     return objective
