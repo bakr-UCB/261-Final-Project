@@ -1,21 +1,27 @@
-from typing import List, Dict, Tuple, Any, Union, Callable, Optional
-import numpy as np
-import random
 from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
-import pyspark.sql.functions as F
-from pyspark.sql import DataFrame
+from hyperopt import STATUS_OK
+from loguru import logger
+import mlflow
+import numpy as np
 from pyspark.ml import Pipeline
-from pyspark.mllib.evaluation import MulticlassMetrics,BinaryClassificationMetrics
 from pyspark.ml.classification import (
     LogisticRegression,
+    MultilayerPerceptronClassifier,
     RandomForestClassifier,
-    MultilayerPerceptronClassifier
 )
+from pyspark.mllib.evaluation import BinaryClassificationMetrics, MulticlassMetrics
+from pyspark.sql import DataFrame
+import pyspark.sql.functions as F
+from tqdm import tqdm
+import typer
 from xgboost.spark import SparkXGBClassifier
-import mlflow
-from hyperopt import hp, STATUS_OK, fmin, tpe, Trials
 
+from flightdelays.config import MODELS_DIR, PROCESSED_DATA_DIR
+
+app = typer.Typer()
 
 def train_test_split_timeseries(df: DataFrame, time_col: str, split_method: str= "frac", test_start: str= None, test_fraction: float = 0.2, max_date: str = "2100-01-01", verbose: bool = True) -> tuple[DataFrame, DataFrame]:
     """
@@ -322,3 +328,23 @@ def make_hyperopt_objective(
         }
 
     return objective
+
+@app.command()
+def main(
+    # ---- REPLACE DEFAULT PATHS AS APPROPRIATE ----
+    features_path: Path = PROCESSED_DATA_DIR / "features.csv",
+    labels_path: Path = PROCESSED_DATA_DIR / "labels.csv",
+    model_path: Path = MODELS_DIR / "model.pkl",
+    # -----------------------------------------
+):
+    # ---- REPLACE THIS WITH YOUR OWN CODE ----
+    logger.info("Training some model...")
+    for i in tqdm(range(10), total=10):
+        if i == 5:
+            logger.info("Something happened for iteration 5.")
+    logger.success("Modeling training complete.")
+    # -----------------------------------------
+
+
+if __name__ == "__main__":
+    app()

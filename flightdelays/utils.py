@@ -1,5 +1,6 @@
 from databricks.sdk.runtime import dbutils
 
+
 def lst_files_r(path):
     files = []
     dirs = [path]
