@@ -1,11 +1,15 @@
-site_name: 261 Final Project
+site_name: Flight Delays Predictions
 site_url: https://github.com/bakr-UCB/261-Final-Project/tree/develop
-site_description: A simple web application that allows users to create and manage a list of tasks.
+site_description: An Machine Learning solusions to predict departure flight delays in the US using Spark on DataBricks.
 site_author: MEDS
 repo_name: 261 Final Project
 repo_url: https://github.com/bakr-UCB/261-Final-Project/tree/develop
 theme:
   name: material
+  favicon: imgs/airplane.png
+  icon:
+    repo: fontawesome/brands/github
+    logo: material/airplane-takeoff
   features:
     - navigation.tabs
     - navigation.sections
@@ -14,7 +18,7 @@ theme:
     - search.suggest
     - search.highlight
     - content.tabs.link
-    - content.code.annotation
+    - content.code.annotate
     - content.code.copy
   language: en
   palette:
@@ -35,7 +39,7 @@ theme:
 #   - social
 #   - search
 
-# markdown_extensions:
+markdown_extensions:
 #   - pymdownx.highlight:
 #       anchor_linenums: true
 #   - pymdownx.inlinehilite
@@ -47,10 +51,10 @@ theme:
 #   - pymdownx.details
 #   - pymdownx.superfences
 #   - pymdownx.mark
-#   - attr_list
-#   - pymdownx.emoji:
-#       emoji_index: !!python/name:materialx.emoji.twemoji
-#       emoji_generator: !!python/name:materialx.emoji.to_svg
+  - attr_list
+  - pymdownx.emoji:
+      emoji_index: !!python/name:materialx.emoji.twemoji
+      emoji_generator: !!python/name:materialx.emoji.to_svg
 
 copyright: |
   &copy; 2023 <a href=""  target="_blank" rel="noopener">MEDS Team</a>
